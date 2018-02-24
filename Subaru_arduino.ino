@@ -20,13 +20,26 @@
 *
 */
 
+#include <dht.h>
 
-const int TEMP_INTERVAL = 5000; // 5 seconds
+const int BUTTON_INTERVAL = 100; //0.1 sec
+const int TEMP_INTERVAL = 20000; // 20 seconds
 const int REVERSING_INTERVAL = 1000; //1 sec
+
 unsigned long lastTempTime = 0;
 unsigned long lastReverseTime = 0;
 
-const int sensorPin = A5; // The input port
+const int reversePin = A0; // The input pin for reverse
+const int buttonPin = A5; // The input pin for hard buttons
+
+#define DHT11_PIN 3
+
+
+
+
+/*
+Hard pin stuff
+*/
 int sensorValue; // Current reading
 int outputValue; // The reported reading
 int lastValues[3] = { 0,0,0 }; // The last 3 readings
@@ -40,11 +53,14 @@ const int R_NO_BUTTON = 1008;
 
 const int R_INFO = 670;
 const int R_MENU = 538;
-const int R_MAP = 194;
+const int R_MAP = 200;
 const int R_AV = 403;
 const int R_MEDIA = 102;
 
-const int R_RANGE = 25;
+const int R_RANGE = 15;
+
+/* stop multiple presses of same button being sent*/
+int old_r= R_NO_BUTTON;
 
 /*
 char messages sent over serial to the android raspi
@@ -56,8 +72,25 @@ const char MAP = 'p';
 const char AV = 'a';
 const char MEDIA = 'e';
 
-/* stop multiple presses of same button being sent*/
-int old_r= R_NO_BUTTON;
+const char REVERSE = 'r'; //reverse
+const char FORWARDS = 'f'; //forwards
+
+const char TEMPERATURE = 't'; //reverse
+const char HUMIDITY = 'h'; //forwards
+
+
+char revState = FORWARDS;
+char oldRevState = FORWARDS;
+
+int revSensorValue; // Current reading on analog pin
+const int REVERSE_THRESHOLD = 300;
+
+const int REVERSE_RESEND_COUNT = 10;
+int revSendCount = 0;
+
+
+dht DHT;
+
 
 void setup()
 {
@@ -78,6 +111,13 @@ void loop()
 		checkTempEtc();
 		lastTempTime = millis();
 	}
+	/*
+	if (Serial.peek() != -1) {
+		do {
+		  char inChar = (char)Serial.read();
+		} while (Serial.peek() != -1);
+	}
+	*/
 }
 
 /*
@@ -87,7 +127,7 @@ Got this debounce code and the wiring from
 */
 int checkHardButtons() {
 	// read the value from the sensor:
-	sensorValue = analogRead(sensorPin);
+	sensorValue = analogRead(buttonPin);
 	// Initialise variables for checks
 	int i;
 	int updateOutput = 1;
@@ -166,8 +206,32 @@ TODO
 Will check whether in revserse (from old wiring harness) and activate USB camera. 
 Deactivate when not in reverse
 
+A0 pin on a voltage divider and goes high, to ~5V, when pin from car port goes high to 12V. 
+
 */
 void checkReversing() {
+	// read the value from the sensor:
+	revSensorValue = analogRead(reversePin);
+
+	if (revSensorValue > REVERSE_THRESHOLD) {
+		revState = REVERSE;
+	}
+	else {
+		revState = FORWARDS;
+	}
+
+	if (revState != oldRevState) {
+		Serial.print(revState);
+		Serial.print("\n");		
+		oldRevState = revState;
+		revSendCount = 0;
+	}
+
+	if (revSendCount < REVERSE_RESEND_COUNT) {
+		Serial.print(revState);
+		Serial.print("\n");
+		revSendCount++;
+	}
 
 }
 
@@ -176,5 +240,12 @@ Will check external ambient temp. Will probaly just use a new sensor,
 but there is one in car somewhere (from olf system) which could presumeably be accessed from harness.
 */
 void checkTempEtc() {
+
+	int chk = DHT.read11(DHT11_PIN);
+	Serial.print('t');
+	Serial.print(DHT.temperature);
+	Serial.print('h');
+	Serial.print(DHT.humidity);
+	Serial.print("\n");
 
 }
